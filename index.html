@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Images → PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e8ee;
+    --muted: #8b93a7;
+    --accent: #6aa5ff;
+    --accent-2: #4a86e6;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p.lead { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+  .grid {
+    display: grid; grid-template-columns: 280px 1fr; gap: 20px;
+  }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  select, input[type="number"] {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+    font-size: 14px;
+  }
+  .row { margin-bottom: 14px; }
+  button {
+    background: var(--accent); color: #0b1020; border: none; border-radius: 6px;
+    padding: 10px 14px; font-weight: 600; cursor: pointer; font-size: 14px;
+    transition: background .15s;
+  }
+  button:hover { background: var(--accent-2); color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: var(--panel-2); color: var(--text); }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 40px 20px;
+    text-align: center; color: var(--muted); transition: all .15s;
+    cursor: pointer;
+  }
+  .drop.dragover { border-color: var(--accent); background: rgba(106,165,255,.06); color: var(--text); }
+  .drop strong { color: var(--text); }
+  .thumbs {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px; margin-top: 16px;
+  }
+  .thumb {
+    position: relative; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab; user-select: none;
+  }
+  .thumb.dragging { opacity: .4; }
+  .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
+  .thumb .idx {
+    position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.7);
+    color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 12px;
+  }
+  .thumb .rm {
+    position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.7);
+    color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px;
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .thumb .rm:hover { background: var(--danger); }
+  .thumb .name {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px;
+    background: rgba(0,0,0,.7); font-size: 11px; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toolbar .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .status { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .progress {
+    height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden;
+    margin-top: 8px; display: none;
+  }
+  .progress.active { display: block; }
+  .progress .bar { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Images → PDF</h1>
+  <p class="lead">Glisse tes images, réordonne-les si besoin, génère un PDF avec une image par page.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="row">
+        <label for="pageSize">Format de page</label>
+        <select id="pageSize">
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+          <option value="a3">A3</option>
+          <option value="a5">A5</option>
+          <option value="fit">Ajuster à l'image</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="orientation">Orientation</label>
+        <select id="orientation">
+          <option value="auto">Auto (selon image)</option>
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Paysage</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="margin">Marge (mm)</label>
+        <input type="number" id="margin" value="10" min="0" max="50" step="1" />
+      </div>
+      <div class="row">
+        <label for="filename">Nom du fichier</label>
+        <input type="number" id="filename" style="display:none" />
+        <input type="text" id="filenameInput" value="images.pdf"
+               style="width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px;" />
+      </div>
+      <button id="generate" disabled>Générer le PDF</button>
+      <div class="progress" id="progress"><div class="bar" id="progressBar"></div></div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div>
+      <div class="drop" id="drop">
+        <strong>Clique ou glisse tes images ici</strong>
+        <div style="margin-top:6px;font-size:13px;">JPEG, PNG, WebP — plusieurs à la fois</div>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+      </div>
+
+      <div class="toolbar" style="margin-top:14px;">
+        <button class="secondary" id="clear">Tout effacer</button>
+        <button class="secondary" id="sortName">Trier par nom</button>
+        <span class="count" id="count">0 image</span>
+      </div>
+
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+const state = { images: [] };
+
+const $ = (id) => document.getElementById(id);
+const drop = $("drop");
+const fileInput = $("fileInput");
+const thumbs = $("thumbs");
+const status = $("status");
+const progress = $("progress");
+const progressBar = $("progressBar");
+const generateBtn = $("generate");
+
+function updateUI() {
+  $("count").textContent = state.images.length + (state.images.length > 1 ? " images" : " image");
+  generateBtn.disabled = state.images.length === 0;
+  renderThumbs();
+}
+
+function renderThumbs() {
+  thumbs.innerHTML = "";
+  state.images.forEach((img, i) => {
+    const el = document.createElement("div");
+    el.className = "thumb";
+    el.draggable = true;
+    el.dataset.index = i;
+    el.innerHTML = `
+      <img src="${img.dataUrl}" alt="" />
+      <span class="idx">${i + 1}</span>
+      <button class="rm" title="Retirer">×</button>
+      <div class="name">${img.name}</div>
+    `;
+    el.querySelector(".rm").addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.images.splice(i, 1);
+      updateUI();
+    });
+    el.addEventListener("dragstart", (e) => {
+      el.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", String(i));
+      e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("dragend", () => el.classList.remove("dragging"));
+    el.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; });
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+      const to = i;
+      if (isNaN(from) || from === to) return;
+      const [moved] = state.images.splice(from, 1);
+      state.images.splice(to, 0, moved);
+      updateUI();
+    });
+    thumbs.appendChild(el);
+  });
+}
+
+function readImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const imgEl = new Image();
+      imgEl.onload = () => resolve({
+        name: file.name,
+        dataUrl,
+        width: imgEl.naturalWidth,
+        height: imgEl.naturalHeight,
+        type: file.type,
+      });
+      imgEl.onerror = reject;
+      imgEl.src = dataUrl;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addFiles(fileList) {
+  const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;
+  status.textContent = `Chargement de ${files.length} image${files.length > 1 ? "s" : ""}…`;
+  for (const f of files) {
+    try {
+      const img = await readImage(f);
+      state.images.push(img);
+    } catch (err) {
+      console.error("Lecture échouée:", f.name, err);
+    }
+  }
+  status.textContent = "";
+  updateUI();
+}
+
+drop.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", (e) => { addFiles(e.target.files); fileInput.value = ""; });
+
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => {
+  e.preventDefault(); drop.classList.add("dragover");
+}));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => {
+  e.preventDefault(); drop.classList.remove("dragover");
+}));
+drop.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+});
+
+$("clear").addEventListener("click", () => { state.images = []; updateUI(); });
+$("sortName").addEventListener("click", () => {
+  state.images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  updateUI();
+});
+
+function getImageFormat(dataUrl) {
+  if (dataUrl.startsWith("data:image/png")) return "PNG";
+  if (dataUrl.startsWith("data:image/webp")) return "WEBP";
+  return "JPEG";
+}
+
+async function generatePDF() {
+  const pageSize = $("pageSize").value;
+  const orientationPref = $("orientation").value;
+  const margin = Math.max(0, parseFloat($("margin").value) || 0);
+  let filename = $("filenameInput").value.trim() || "images.pdf";
+  if (!filename.toLowerCase().endsWith(".pdf")) filename += ".pdf";
+
+  generateBtn.disabled = true;
+  progress.classList.add("active");
+  progressBar.style.width = "0%";
+  status.textContent = "Génération en cours…";
+
+  try {
+    let pdf = null;
+
+    for (let i = 0; i < state.images.length; i++) {
+      const img = state.images[i];
+      const isLandscape = img.width > img.height;
+      let orientation = orientationPref === "auto"
+        ? (isLandscape ? "landscape" : "portrait")
+        : orientationPref;
+
+      if (pageSize === "fit") {
+        // Page exactly the image size in px converted to pt (1px ≈ 0.75pt)
+        const w = img.width * 0.75;
+        const h = img.height * 0.75;
+        if (!pdf) {
+          pdf = new jsPDF({ orientation: w > h ? "landscape" : "portrait", unit: "pt", format: [w, h] });
+        } else {
+          pdf.addPage([w, h], w > h ? "landscape" : "portrait");
+        }
+        pdf.addImage(img.dataUrl, getImageFormat(img.dataUrl), 0, 0, w, h, undefined, "FAST");
+      } else {
+        if (!pdf) {
+          pdf = new jsPDF({ orientation, unit: "mm", format: pageSize });
+        } else {
+          pdf.addPage(pageSize, orientation);
+        }
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const availW = pageW - margin * 2;
+        const availH = pageH - margin * 2;
+        const ratio = Math.min(availW / img.width, availH / img.height);
+        const drawW = img.width * ratio;
+        const drawH = img.height * ratio;
+        const x = (pageW - drawW) / 2;
+        const y = (pageH - drawH) / 2;
+        pdf.addImage(img.dataUrl, getImageFormat(img.dataUrl), x, y, drawW, drawH, undefined, "FAST");
+      }
+
+      const pct = Math.round(((i + 1) / state.images.length) * 100);
+      progressBar.style.width = pct + "%";
+      status.textContent = `Page ${i + 1}/${state.images.length}…`;
+      // Yield so the UI can update
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    pdf.save(filename);
+    status.textContent = `PDF généré : ${filename} (${state.images.length} page${state.images.length > 1 ? "s" : ""}).`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Erreur pendant la génération : " + (err && err.message ? err.message : err);
+  } finally {
+    generateBtn.disabled = state.images.length === 0;
+    setTimeout(() => progress.classList.remove("active"), 800);
+  }
+}
+
+generateBtn.addEventListener("click", generatePDF);
+
+updateUI();
+</script>
+</body>
+</html>
